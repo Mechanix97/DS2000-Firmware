@@ -12,12 +12,18 @@ enum MessageCode : uint8_t
 {
     /// The application opening a session. Answered with MSG_DEVICE_INFO.
     MSG_HELLO = 0x00,
-    /// `[protocol][major][minor][patch]`: what the application decides compatibility on.
+    /// `[protocol][board][major][minor][patch]`: what the application decides compatibility on.
     MSG_DEVICE_INFO = 0x01,
     MSG_BUTTON = 0x02,
     MSG_VOICE_SETTINGS = 0x03,
     MSG_RGB = 0x04,
+    /// Reboot into USB boot for a firmware update. Payload is REBOOT_MAGIC.
+    MSG_REBOOT_TO_BOOTLOADER = 0x05,
 };
+
+/// Required payload of MSG_REBOOT_TO_BOOTLOADER. The CRC already rejects corrupted frames, but a
+/// message that takes the device offline should not hang on a single code byte either.
+const uint8_t REBOOT_MAGIC[] = {'B', 'O', 'O', 'T'};
 
 enum ButtonId : uint8_t
 {
@@ -34,9 +40,12 @@ enum ButtonId : uint8_t
 /// exchange; before it frames ended on a bare 0xFF and the handshake was an empty ping/pong.
 const uint8_t PROTOCOL_VERSION = 1;
 
-// Injected by scripts/version.py from platformio.ini.
+// Injected by scripts/build_info.py from platformio.ini.
 #if !defined(FIRMWARE_VERSION_MAJOR) || !defined(FIRMWARE_VERSION_MINOR) || !defined(FIRMWARE_VERSION_PATCH)
-#error "The firmware version is missing: build through PlatformIO so scripts/version.py runs"
+#error "The firmware version is missing: build through PlatformIO so scripts/build_info.py runs"
+#endif
+#ifndef BOARD_ID
+#error "BOARD_ID is missing: set custom_board_id for this environment in platformio.ini"
 #endif
 
 enum RgbMode : uint8_t
@@ -232,13 +241,15 @@ void sendFrame(const uint8_t *body, size_t length)
     Serial.flush();
 }
 
-/// Answers a hello with `[protocol][major][minor][patch]`, so the application can tell which
-/// firmware it is talking to and refuse one whose protocol it does not speak.
+/// Answers a hello with `[protocol][board][major][minor][patch]`, so the application can tell
+/// which firmware it is talking to, refuse one whose protocol it does not speak, and pick the
+/// right image when updating it.
 void sendDeviceInfo()
 {
     const uint8_t payload[] = {
         MSG_DEVICE_INFO,
         PROTOCOL_VERSION,
+        BOARD_ID,
         FIRMWARE_VERSION_MAJOR,
         FIRMWARE_VERSION_MINOR,
         FIRMWARE_VERSION_PATCH,
@@ -328,6 +339,16 @@ void dispatch(const uint8_t *payload, uint8_t length)
         break;
     case MSG_RGB:
         handleRgb(payload, length);
+        break;
+    case MSG_REBOOT_TO_BOOTLOADER:
+        if (length == 1 + sizeof(REBOOT_MAGIC) && memcmp(payload + 1, REBOOT_MAGIC, sizeof(REBOOT_MAGIC)) == 0)
+        {
+            // Nothing is answered: the port disappearing is the reply. The LEDs go dark so the
+            // device does not look stuck on its last colour while it waits for an image.
+            writeLed(MUTE_LED_RED, MUTE_LED_GREEN, MUTE_LED_BLUE, muteLed, false);
+            writeLed(DEAF_LED_RED, DEAF_LED_GREEN, DEAF_LED_BLUE, deafLed, false);
+            rp2040.rebootToBootloader();
+        }
         break;
     case MSG_DEVICE_INFO:
     case MSG_BUTTON:

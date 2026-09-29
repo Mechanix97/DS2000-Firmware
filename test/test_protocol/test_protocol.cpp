@@ -1,8 +1,8 @@
 // Framing tests, run on the host with `pio test -e native`.
 //
-// The byte vectors are the same ones the application asserts in
-// src-tauri/src/backend/serial/serial_message.rs, so the two implementations are checked against
-// each other rather than each only against itself.
+// The byte vectors are the "Reference frames" of the protocol spec, docs/PROTOCOL.md in the
+// application repository, and the same ones it asserts in serial_message.rs, so the two
+// implementations are checked against each other rather than each only against itself.
 
 #include <string.h>
 #include <unity.h>
@@ -33,9 +33,14 @@ void test_frames_match_the_reference_wire_bytes()
     const uint8_t helloWire[] = {0x01, 0x03, 0xE1, 0xF0, 0x00};
     assertFrame(hello, sizeof(hello), helloWire, sizeof(helloWire));
 
-    const uint8_t deviceInfo[] = {0x01, 1, 0, 2, 0};
-    const uint8_t deviceInfoWire[] = {0x03, 0x01, 0x01, 0x02, 0x02, 0x03, 0xAB, 0x8B, 0x00};
+    // Protocol 1, board 0x01 (RP2350-Zero), firmware 0.2.0.
+    const uint8_t deviceInfo[] = {0x01, 1, 0x01, 0, 2, 0};
+    const uint8_t deviceInfoWire[] = {0x04, 0x01, 0x01, 0x01, 0x02, 0x02, 0x03, 0xF1, 0x37, 0x00};
     assertFrame(deviceInfo, sizeof(deviceInfo), deviceInfoWire, sizeof(deviceInfoWire));
+
+    const uint8_t reboot[] = {0x05, 'B', 'O', 'O', 'T'};
+    const uint8_t rebootWire[] = {0x08, 0x05, 0x42, 0x4F, 0x4F, 0x54, 0x87, 0xB0, 0x00};
+    assertFrame(reboot, sizeof(reboot), rebootWire, sizeof(rebootWire));
 
     const uint8_t mute[] = {0x02, 0x00};
     const uint8_t muteWire[] = {0x02, 0x02, 0x03, 0x7B, 0x6D, 0x00};
