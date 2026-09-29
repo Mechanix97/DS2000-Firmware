@@ -23,6 +23,18 @@ enum ButtonId : uint8_t
     BUTTON_DISCONNECT = 0x02,
 };
 
+/// Wire format revision this firmware speaks, reported in the pong.
+///
+/// The application refuses a device whose revision differs from its own, so bump this with every
+/// change to the framing, a message code or a payload layout, together with the application's
+/// `PROTOCOL_VERSION`. Revision 1 is the first to report versions; before it the pong was empty.
+const uint8_t PROTOCOL_VERSION = 1;
+
+// Injected by scripts/version.py from platformio.ini.
+#if !defined(FIRMWARE_VERSION_MAJOR) || !defined(FIRMWARE_VERSION_MINOR) || !defined(FIRMWARE_VERSION_PATCH)
+#error "The firmware version is missing: build through PlatformIO so scripts/version.py runs"
+#endif
+
 /// Frames are terminated by this byte, which is therefore not available inside a payload. The
 /// desktop side lowers any 255 to 254 for the same reason.
 const uint8_t FRAME_DELIMITER = 0xFF;
@@ -216,9 +228,17 @@ void sendFrame(const uint8_t *payload, size_t length)
     Serial.flush();
 }
 
+/// Answers a ping with `[protocol][major][minor][patch]`, so the application can tell which
+/// firmware it is talking to and refuse one whose protocol it does not speak.
 void sendPong()
 {
-    const uint8_t payload[] = {MSG_PONG};
+    const uint8_t payload[] = {
+        MSG_PONG,
+        PROTOCOL_VERSION,
+        FIRMWARE_VERSION_MAJOR,
+        FIRMWARE_VERSION_MINOR,
+        FIRMWARE_VERSION_PATCH,
+    };
     sendFrame(payload, sizeof(payload));
 }
 
