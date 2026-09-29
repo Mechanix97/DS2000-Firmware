@@ -1,7 +1,7 @@
 """Injects the firmware version into the build.
 
 The version is written once, as `custom_firmware_version` in platformio.ini, and reaches the code
-as FIRMWARE_VERSION_MAJOR/MINOR/PATCH. The device reports it in the handshake pong, so it has to be
+as FIRMWARE_VERSION_MAJOR/MINOR/PATCH. The device reports it in the handshake's device info, so it has to be
 right: a build of a tagged commit whose tag disagrees with it is refused rather than shipped
 reporting the wrong version.
 """
@@ -23,9 +23,9 @@ if not match:
     fail(f"custom_firmware_version must look like 1.2.3, got {version!r}")
 
 parts = [int(part) for part in match.groups()]
-# Each part travels as one byte of the pong payload, and 0xFF is the frame delimiter.
-if any(part > 254 for part in parts):
-    fail(f"version {version}: each part must be at most 254 to fit the serial protocol")
+# Each part travels as one byte of the device info payload.
+if any(part > 255 for part in parts):
+    fail(f"version {version}: each part must fit in a byte")
 
 try:
     tag = subprocess.run(

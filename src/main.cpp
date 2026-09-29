@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include "pins.h"
+#include "protocol.h"
 
 /// Ignore further edges from the same button for this long after one is accepted.
 const unsigned long DEBOUNCE_TIMEOUT = 250;
@@ -9,8 +10,10 @@ const unsigned long DEBOUNCE_TIMEOUT = 250;
 /// flashed, so they are part of the contract rather than an implementation detail.
 enum MessageCode : uint8_t
 {
-    MSG_PING = 0x00,
-    MSG_PONG = 0x01,
+    /// The application opening a session. Answered with MSG_DEVICE_INFO.
+    MSG_HELLO = 0x00,
+    /// `[protocol][major][minor][patch]`: what the application decides compatibility on.
+    MSG_DEVICE_INFO = 0x01,
     MSG_BUTTON = 0x02,
     MSG_VOICE_SETTINGS = 0x03,
     MSG_RGB = 0x04,
@@ -23,21 +26,18 @@ enum ButtonId : uint8_t
     BUTTON_DISCONNECT = 0x02,
 };
 
-/// Wire format revision this firmware speaks, reported in the pong.
+/// Wire format revision this firmware speaks, reported in MSG_DEVICE_INFO.
 ///
 /// The application refuses a device whose revision differs from its own, so bump this with every
 /// change to the framing, a message code or a payload layout, together with the application's
-/// `PROTOCOL_VERSION`. Revision 1 is the first to report versions; before it the pong was empty.
+/// `PROTOCOL_VERSION`. Revision 1 introduced COBS framing with a CRC and the hello / device info
+/// exchange; before it frames ended on a bare 0xFF and the handshake was an empty ping/pong.
 const uint8_t PROTOCOL_VERSION = 1;
 
 // Injected by scripts/version.py from platformio.ini.
 #if !defined(FIRMWARE_VERSION_MAJOR) || !defined(FIRMWARE_VERSION_MINOR) || !defined(FIRMWARE_VERSION_PATCH)
 #error "The firmware version is missing: build through PlatformIO so scripts/version.py runs"
 #endif
-
-/// Frames are terminated by this byte, which is therefore not available inside a payload. The
-/// desktop side lowers any 255 to 254 for the same reason.
-const uint8_t FRAME_DELIMITER = 0xFF;
 
 enum RgbMode : uint8_t
 {
@@ -99,8 +99,7 @@ const unsigned long ANIMATION_INTERVAL = 16;
 /// so a device that never hears from the application still behaves the way it always did.
 uint8_t rgbSpeed = 128;
 
-/// The speed byte cannot reach 255: that value is the frame delimiter.
-const uint8_t SPEED_MAX = 254;
+const uint8_t SPEED_MAX = 255;
 
 /// Bounds for one full hue sweep and one full inhale-exhale, slowest to fastest.
 ///
@@ -153,8 +152,7 @@ void hueToRgb(uint16_t hue, uint8_t &red, uint8_t &green, uint8_t &blue)
 /// to shorten the lap, not stretch it.
 unsigned long periodFor(unsigned long slowest, unsigned long fastest)
 {
-    const uint8_t speed = rgbSpeed > SPEED_MAX ? SPEED_MAX : rgbSpeed;
-    return slowest - (unsigned long)speed * (slowest - fastest) / SPEED_MAX;
+    return slowest - (unsigned long)rgbSpeed * (slowest - fastest) / SPEED_MAX;
 }
 
 /// Where in the breath we are, 0 (dark) to 255 (full).
@@ -221,19 +219,25 @@ void set_led_pwm()
     writeLed(DEAF_LED_RED, DEAF_LED_GREEN, DEAF_LED_BLUE, second, deafen);
 }
 
-void sendFrame(const uint8_t *payload, size_t length)
+/// Sends one message body, framed: CRC, COBS and the delimiter are added here.
+void sendFrame(const uint8_t *body, size_t length)
 {
-    Serial.write(payload, length);
-    Serial.write(FRAME_DELIMITER);
+    uint8_t wire[protocol::MAX_ENCODED_FRAME];
+    const size_t wireLength = protocol::encodeFrame(body, length, wire);
+    if (wireLength == 0)
+    {
+        return;
+    }
+    Serial.write(wire, wireLength);
     Serial.flush();
 }
 
-/// Answers a ping with `[protocol][major][minor][patch]`, so the application can tell which
+/// Answers a hello with `[protocol][major][minor][patch]`, so the application can tell which
 /// firmware it is talking to and refuse one whose protocol it does not speak.
-void sendPong()
+void sendDeviceInfo()
 {
     const uint8_t payload[] = {
-        MSG_PONG,
+        MSG_DEVICE_INFO,
         PROTOCOL_VERSION,
         FIRMWARE_VERSION_MAJOR,
         FIRMWARE_VERSION_MINOR,
@@ -307,18 +311,14 @@ void handleRgb(const uint8_t *payload, uint8_t length)
 
 void dispatch(const uint8_t *payload, uint8_t length)
 {
-    // An empty frame is not a Ping. The buffer is zeroed after each frame and 0x00 happens to be
-    // the Ping code, so a stray delimiter used to answer with a Pong nobody asked for — which is
-    // exactly what the desktop app produced while it was sending its own delimiter twice.
-    if (length == 0)
-    {
-        return;
-    }
-
     switch (payload[0])
     {
-    case MSG_PING:
-        sendPong();
+    case MSG_HELLO:
+        // Exactly the code: anything longer is not a hello, whatever its first byte says.
+        if (length == 1)
+        {
+            sendDeviceInfo();
+        }
         break;
     case MSG_VOICE_SETTINGS:
         if (length >= 3)
@@ -329,7 +329,7 @@ void dispatch(const uint8_t *payload, uint8_t length)
     case MSG_RGB:
         handleRgb(payload, length);
         break;
-    case MSG_PONG:
+    case MSG_DEVICE_INFO:
     case MSG_BUTTON:
         // Sent by this device, never received by it.
         break;
@@ -338,19 +338,31 @@ void dispatch(const uint8_t *payload, uint8_t length)
     }
 }
 
+/// Collects encoded bytes up to each delimiter, then decodes and dispatches the frame.
+///
+/// A frame whose COBS or CRC does not check out is dropped whole. Before the CRC, a frame missing
+/// its first byte was simply read as whichever message the next byte named.
 void handle_serial_input()
 {
-    static uint8_t buf[32];
-    static uint8_t i = 0;
+    static uint8_t buf[protocol::MAX_ENCODED_FRAME];
+    static size_t i = 0;
+    /// Set when a frame outgrew the buffer, so its tail is not mistaken for the start of another.
+    static bool overflowed = false;
 
     while (Serial.available())
     {
-        uint8_t c = Serial.read();
+        const uint8_t c = Serial.read();
 
-        if (c == FRAME_DELIMITER)
+        if (c == protocol::FRAME_DELIMITER)
         {
-            dispatch(buf, i);
+            size_t bodyLength = 0;
+            // Back-to-back delimiters carry nothing and are skipped.
+            if (!overflowed && i > 0 && protocol::decodeFrame(buf, i, bodyLength))
+            {
+                dispatch(buf, bodyLength);
+            }
             i = 0;
+            overflowed = false;
             continue;
         }
 
@@ -360,8 +372,7 @@ void handle_serial_input()
         }
         else
         {
-            // Oversized frame: drop it and resynchronise on the next delimiter.
-            i = 0;
+            overflowed = true;
         }
     }
 }
