@@ -12,6 +12,19 @@ pio run            # build every environment
 pio run -e pico2   # build a specific one
 ```
 
+## Serial protocol
+
+The wire format this firmware speaks with the desktop app is specified in the app repository:
+[docs/PROTOCOL.md](https://github.com/Mechanix97/DS2000/blob/main/docs/PROTOCOL.md). Any change to
+it bumps `PROTOCOL_VERSION` on both sides and lands as a pair of pull requests.
+
+The version is set once, as `custom_firmware_version` in `platformio.ini`, and each board
+environment sets its `custom_board_id`. Both are reported to the app in the handshake.
+
+```sh
+pio test -e native   # framing tests against the protocol's reference frames (needs gcc or clang)
+```
+
 ## The DS-2000 project
 
 - [DS2000](https://github.com/Mechanix97/DS2000): the desktop app
