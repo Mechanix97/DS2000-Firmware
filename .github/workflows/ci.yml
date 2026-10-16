@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  # No base-branch filter: feature branches can stack on each other, so a PR is not always
+  # targeting main. Filtering by base would silently skip CI on those.
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to the same PR cancels the previous run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: protocol tests (native)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      # The framing tests run on the host against the reference frames in the application's
+      # docs/PROTOCOL.md. ubuntu-latest ships gcc, which is all the native environment needs.
+      - name: Test
+        run: pio test -e native
+
+  build:
+    name: build (${{ matrix.env }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      # One board failing should not hide whether the others build.
+      fail-fast: false
+      matrix:
+        env: [rp2350_zero, pico2, pico]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      # The platform, the earlephilhower core and its toolchain are several hundred MB and are
+      # downloaded on first use. Keyed on platformio.ini, which is where all of them are chosen.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: platformio-${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: platformio-${{ runner.os }}-${{ matrix.env }}-
+
+      - name: Build
+        run: pio run -e ${{ matrix.env }}
+
+      # The image a reviewer can drag onto the board in USB boot mode to try the PR.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.env }}
+          path: .pio/build/${{ matrix.env }}/firmware.uf2
+          if-no-files-found: error
