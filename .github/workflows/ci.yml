@@ -47,7 +47,14 @@ jobs:
       # One board failing should not hide whether the others build.
       fail-fast: false
       matrix:
-        env: [rp2350_zero, pico2, pico]
+        include:
+          - env: rp2350_zero
+          - env: pico2
+          - env: pico
+          # Built so the pixel LED driver keeps compiling before rev A has an environment, but not
+          # released: its artifact is named dev-firmware-*, which the release job does not pick up.
+          - env: rp2350_zero_pixel
+            dev: true
 
     steps:
       - uses: actions/checkout@v4
@@ -73,7 +80,7 @@ jobs:
       # The image a reviewer can drag onto the board in USB boot mode to try the PR.
       - uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{ matrix.env }}
+          name: ${{ matrix.dev && 'dev-' || '' }}firmware-${{ matrix.env }}
           path: .pio/build/${{ matrix.env }}/firmware.uf2
           if-no-files-found: error
 

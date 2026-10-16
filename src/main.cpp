@@ -1,5 +1,6 @@
 #include <Arduino.h>
 
+#include "leds.h"
 #include "pins.h"
 #include "protocol.h"
 
@@ -54,14 +55,6 @@ enum RgbMode : uint8_t
     RGB_MODE_FIXED = 0x01,
     RGB_MODE_BREATHING = 0x02,
 };
-
-typedef struct
-{
-    uint8_t red;
-    uint8_t green;
-    uint8_t blue;
-    uint8_t brightness;
-} LED_RGB_T;
 
 LED_RGB_T muteLed = {255, 255, 255, 255};
 LED_RGB_T deafLed = {255, 255, 255, 255};
@@ -118,21 +111,6 @@ const unsigned long RAINBOW_PERIOD_SLOWEST = 12000;
 const unsigned long RAINBOW_PERIOD_FASTEST = 1000;
 const unsigned long BREATH_PERIOD_SLOWEST = 6000;
 const unsigned long BREATH_PERIOD_FASTEST = 600;
-
-void writeLed(uint8_t redPin, uint8_t greenPin, uint8_t bluePin, const LED_RGB_T &led, bool on)
-{
-    if (!on)
-    {
-        analogWrite(redPin, 0);
-        analogWrite(greenPin, 0);
-        analogWrite(bluePin, 0);
-        return;
-    }
-
-    analogWrite(redPin, led.red * led.brightness / 255);
-    analogWrite(greenPin, led.green * led.brightness / 255);
-    analogWrite(bluePin, led.blue * led.brightness / 255);
-}
 
 /// Full-saturation colour for a hue in 0..1535.
 ///
@@ -224,8 +202,7 @@ void set_led_pwm()
 
     // Deafening implies muting, which is what Discord itself enforces, so the mute LED follows
     // both.
-    writeLed(MUTE_LED_RED, MUTE_LED_GREEN, MUTE_LED_BLUE, first, mute || deafen);
-    writeLed(DEAF_LED_RED, DEAF_LED_GREEN, DEAF_LED_BLUE, second, deafen);
+    ledsShow(first, mute || deafen, second, deafen);
 }
 
 /// Sends one message body, framed: CRC, COBS and the delimiter are added here.
@@ -345,8 +322,7 @@ void dispatch(const uint8_t *payload, uint8_t length)
         {
             // Nothing is answered: the port disappearing is the reply. The LEDs go dark so the
             // device does not look stuck on its last colour while it waits for an image.
-            writeLed(MUTE_LED_RED, MUTE_LED_GREEN, MUTE_LED_BLUE, muteLed, false);
-            writeLed(DEAF_LED_RED, DEAF_LED_GREEN, DEAF_LED_BLUE, deafLed, false);
+            ledsShow(muteLed, false, deafLed, false);
             rp2040.rebootToBootloader();
         }
         break;
@@ -464,12 +440,7 @@ void setup()
 
     // No LED_BUILTIN here: it was configured but never written to, and the board this runs on
     // has a WS2812 on GPIO16 instead of a plain LED, so the constant does not even exist for it.
-    pinMode(MUTE_LED_RED, OUTPUT);
-    pinMode(MUTE_LED_GREEN, OUTPUT);
-    pinMode(MUTE_LED_BLUE, OUTPUT);
-    pinMode(DEAF_LED_RED, OUTPUT);
-    pinMode(DEAF_LED_GREEN, OUTPUT);
-    pinMode(DEAF_LED_BLUE, OUTPUT);
+    ledsBegin();
 
     attachInterrupt(digitalPinToInterrupt(MUTE_BUTTON), muteButtonISR, FALLING);
     attachInterrupt(digitalPinToInterrupt(DEAF_BUTTON), deafenButtonISR, FALLING);

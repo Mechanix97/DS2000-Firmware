@@ -22,6 +22,9 @@ brightness and mode (rainbow, fixed, breathing) are set from the app.
 The board id is reported to the app in the handshake. The DS2000 rev A board does not have an
 environment yet ([#12](https://github.com/Mechanix97/DS2000-Firmware/issues/12)).
 
+`rp2350_zero_pixel` is a development build of `rp2350_zero` that runs the rev A LED driver on the
+module's onboard WS2812 (mute LED only). It is not released.
+
 ## Installing a release
 
 The latest images are in the [latest release](https://github.com/Mechanix97/DS2000-Firmware/releases/latest),
@@ -62,11 +65,17 @@ BOOT button as in [Installing a release](#installing-a-release); then run `uploa
 | Mute key | GP0 |
 | Deafen key | GP1 |
 | Disconnect key | GP2 |
-| Mute LED R / G / B | GP5 / GP6 / GP7 |
-| Deafen LED R / G / B | GP8 / GP9 / GP10 |
 
-The keys are active-low, with the internal pull-ups, and go to ground. The LEDs are common-cathode,
-driven with PWM. [`include/pins.h`](include/pins.h) is the source of truth: the
+The keys are active-low, with the internal pull-ups, and go to ground.
+
+The LEDs have two drivers, picked per environment:
+
+| Driver | Hardware | Pins | Used by |
+|---|---|---|---|
+| PWM (default) | One common-cathode RGB LED per key | Mute R / G / B on GP5 / GP6 / GP7, deafen on GP8 / GP9 / GP10 | the prototype: `rp2350_zero`, `pico2`, `pico` |
+| Pixel (`LED_DRIVER_PIXEL`) | SK6812MINI-E chain, mute first, GRB | Data on GP5 | rev A |
+
+[`include/pins.h`](include/pins.h) is the source of truth: the
 [PCB](https://github.com/Mechanix97/DS2000-PCB) follows it.
 
 ## Serial protocol
