@@ -2,9 +2,9 @@
   <img src="docs/img/ds2000-logo.webp" alt="DS2000" width="150">
 </p>
 
-# DS-2000 firmware
+# DS2000 firmware
 
-Firmware for the DS-2000, a three-key Discord control deck. Built with PlatformIO for the Waveshare
+Firmware for the DS2000, a three-key Discord control deck. Built with PlatformIO for the Waveshare
 RP2350-Zero (default), the Pico 2 and the Pico.
 
 ```sh
@@ -25,7 +25,7 @@ environment sets its `custom_board_id`. Both are reported to the app in the hand
 pio test -e native   # framing tests against the protocol's reference frames (needs gcc or clang)
 ```
 
-## The DS-2000 project
+## The DS2000 project
 
 - [DS2000](https://github.com/Mechanix97/DS2000): the desktop app
 - [DS2000-PCB](https://github.com/Mechanix97/DS2000-PCB): the KiCad board
