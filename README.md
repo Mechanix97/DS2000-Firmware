@@ -73,7 +73,7 @@ The LEDs have two drivers, picked per environment:
 | Driver | Hardware | Pins | Used by |
 |---|---|---|---|
 | PWM (default) | One common-cathode RGB LED per key | Mute R / G / B on GP5 / GP6 / GP7, deafen on GP8 / GP9 / GP10 | the prototype: `rp2350_zero`, `pico2`, `pico` |
-| Pixel (`LED_DRIVER_PIXEL`) | SK6812MINI-E chain, mute first, GRB | Data on GP5 | rev A |
+| Pixel (`LED_DRIVER_PIXEL`) | WS2812-compatible chain, mute first, GRB | Data on GP5 | rev A |
 
 [`include/pins.h`](include/pins.h) is the source of truth: the
 [PCB](https://github.com/Mechanix97/DS2000-PCB) follows it.

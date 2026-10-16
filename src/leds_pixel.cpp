@@ -1,6 +1,6 @@
-// Pixel driver: SK6812 / WS2812 pixels chained on LED_DATA, mute first, then deafen. Selected with
-// LED_DRIVER_PIXEL. Adafruit_NeoPixel drives the chain from a PIO state machine on the RP2040 and
-// RP2350, so the CPU does not bit-bang the 800 kHz timing.
+// Pixel driver: WS2812-compatible pixels (WS2812B, SK6812) chained on LED_DATA, mute first, then
+// deafen. Selected with LED_DRIVER_PIXEL. Adafruit_NeoPixel drives the chain from a PIO state
+// machine on the RP2040 and RP2350, so the CPU does not bit-bang the 800 kHz timing.
 #ifdef LED_DRIVER_PIXEL
 
 #include <Adafruit_NeoPixel.h>

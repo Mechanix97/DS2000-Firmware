@@ -15,7 +15,7 @@ typedef struct
 ///
 /// Two drivers exist side by side because the hardware is in transition: the prototype has one
 /// four-pin common-cathode RGB LED per key on six PWM pins (leds_pwm.cpp, the default), while the
-/// rev A board chains SK6812MINI-E pixels on a single data pin (leds_pixel.cpp, selected with
+/// rev A board chains WS2812-compatible pixels on a single data pin (leds_pixel.cpp, selected with
 /// LED_DRIVER_PIXEL). Everything above this interface, the modes and the mute/deafen gating, is
 /// the same for both.
 
