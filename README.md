@@ -46,6 +46,10 @@ pio run -e rp2350_zero -t upload
 
 The image ends up in `.pio/build/<environment>/firmware.uf2`.
 
+The Makefile wraps the same commands: `make build`, `make upload`, `make test` and `make clean`.
+`ENV` picks the board (`make upload ENV=pico`) and `PIO` the command, if `pio` is not on the PATH
+(`make upload PIO="python -m platformio"`).
+
 `upload` reboots a board already running this firmware into USB boot by itself. Close the DS2000
 app first, since it holds the serial port. A blank board, or one running something else, needs the
 BOOT button as in [Installing a release](#installing-a-release); then run `upload` again or copy the
