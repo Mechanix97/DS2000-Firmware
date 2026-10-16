@@ -2,10 +2,8 @@
 
 #include "leds.h"
 #include "pins.h"
+#include "debounce.h"
 #include "protocol.h"
-
-/// Ignore further edges from the same button for this long after one is accepted.
-const unsigned long DEBOUNCE_TIMEOUT = 250;
 
 /// Message codes shared with the desktop application. Changing one breaks every device already
 /// flashed, so they are part of the contract rather than an implementation detail.
@@ -59,23 +57,18 @@ enum RgbMode : uint8_t
 LED_RGB_T muteLed = {255, 255, 255, 255};
 LED_RGB_T deafLed = {255, 255, 255, 255};
 
-volatile bool mute = false;
-volatile bool deafen = false;
+bool mute = false;
+bool deafen = false;
 
-/// Set by the interrupt handlers, acted on in loop().
+/// One debouncer per key, fed from loop().
 ///
-/// The handlers used to write to Serial directly, but Serial.flush() blocks until the USB buffer
-/// drains and doing that inside an interrupt can stall the core or lose the write entirely. An
-/// interrupt should record what happened and return.
-volatile bool muteButtonPressed = false;
-volatile bool deafenButtonPressed = false;
-volatile bool disconnectButtonPressed = false;
-
-/// One timestamp per button. A single shared one meant pressing mute and then deafen within the
-/// debounce window silently dropped the second press.
-volatile unsigned long lastMuteInterrupt = 0;
-volatile unsigned long lastDeafenInterrupt = 0;
-volatile unsigned long lastDisconnectInterrupt = 0;
+/// The keys used to be read by FALLING-edge interrupts with a 250 ms lockout, which turned the
+/// release of a key held longer than that into a second press (#11). They are polled instead: a
+/// pass of loop() takes microseconds, far below the 10 ms a press has to hold to count, and
+/// polling keeps all key handling, Serial included, out of interrupt context.
+debounce::Key muteKey;
+debounce::Key deafenKey;
+debounce::Key disconnectKey;
 
 /// Whether the LEDs need rewriting. Without it the PWM registers were rewritten on every pass of
 /// loop(), thousands of times a second, to keep showing the same colour.
@@ -374,60 +367,29 @@ void handle_serial_input()
     }
 }
 
-void muteButtonISR()
-{
-    unsigned long now = millis();
-    if (now - lastMuteInterrupt > DEBOUNCE_TIMEOUT)
-    {
-        lastMuteInterrupt = now;
-        muteButtonPressed = true;
-    }
-}
-
-void deafenButtonISR()
-{
-    unsigned long now = millis();
-    if (now - lastDeafenInterrupt > DEBOUNCE_TIMEOUT)
-    {
-        lastDeafenInterrupt = now;
-        deafenButtonPressed = true;
-    }
-}
-
-void disconnectButtonISR()
-{
-    unsigned long now = millis();
-    if (now - lastDisconnectInterrupt > DEBOUNCE_TIMEOUT)
-    {
-        lastDisconnectInterrupt = now;
-        disconnectButtonPressed = true;
-    }
-}
-
-/// Reports the presses the interrupts recorded, and toggles locally so the LED follows the
-/// button even with no application connected. The app confirms or corrects it by sending back a
-/// voice settings message.
+/// Reports settled presses, and toggles locally so the LED follows the button even with no
+/// application connected. The app confirms or corrects it by sending back a voice settings
+/// message. The keys are active-low: pressed pulls the pin to ground.
 void handle_buttons()
 {
-    if (muteButtonPressed)
+    const unsigned long now = millis();
+
+    if (muteKey.update(digitalRead(MUTE_BUTTON) == LOW, now))
     {
-        muteButtonPressed = false;
         mute = !mute;
         ledsDirty = true;
         sendButton(BUTTON_MUTE);
     }
 
-    if (deafenButtonPressed)
+    if (deafenKey.update(digitalRead(DEAF_BUTTON) == LOW, now))
     {
-        deafenButtonPressed = false;
         deafen = !deafen;
         ledsDirty = true;
         sendButton(BUTTON_DEAFEN);
     }
 
-    if (disconnectButtonPressed)
+    if (disconnectKey.update(digitalRead(DISCONNECT_BUTTON) == LOW, now))
     {
-        disconnectButtonPressed = false;
         sendButton(BUTTON_DISCONNECT);
     }
 }
@@ -441,10 +403,6 @@ void setup()
     // No LED_BUILTIN here: it was configured but never written to, and the board this runs on
     // has a WS2812 on GPIO16 instead of a plain LED, so the constant does not even exist for it.
     ledsBegin();
-
-    attachInterrupt(digitalPinToInterrupt(MUTE_BUTTON), muteButtonISR, FALLING);
-    attachInterrupt(digitalPinToInterrupt(DEAF_BUTTON), deafenButtonISR, FALLING);
-    attachInterrupt(digitalPinToInterrupt(DISCONNECT_BUTTON), disconnectButtonISR, FALLING);
 
     Serial.begin(115200);
 }
