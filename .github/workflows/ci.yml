@@ -137,6 +137,28 @@ jobs:
           sha256sum *.uf2 > SHA256SUMS
           cat SHA256SUMS
 
+      # The app installs only images whose minisign signature checks against the public key it
+      # ships with, the one in minisign.pub (DS2000#35). Tauri's signer does the signing and writes
+      # the signature base64-encoded; it is decoded into a standard .minisig, and checked with
+      # minisign itself so a key that does not match minisign.pub fails here, not in the app.
+      - name: Sign the images
+        env:
+          TAURI_PRIVATE_KEY: ${{ secrets.FIRMWARE_SIGNING_KEY }}
+          TAURI_PRIVATE_KEY_PASSWORD: ${{ secrets.FIRMWARE_SIGNING_KEY_PASSWORD }}
+        run: |
+          if [ -z "$TAURI_PRIVATE_KEY" ]; then
+            echo "::error::The FIRMWARE_SIGNING_KEY secret is not set, and the app refuses unsigned images"
+            exit 1
+          fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq minisign > /dev/null
+          cd dist
+          for image in *.uf2; do
+            npx --yes @tauri-apps/cli@2.7.1 signer sign "$image" > /dev/null
+            base64 -d "$image.sig" > "$image.minisig"
+            rm "$image.sig"
+            minisign -V -q -p ../minisign.pub -m "$image"
+          done
+
       # A draft, so publishing stays a human decision. Re-running the workflow for the same tag
       # replaces the images instead of failing on the existing release.
       - name: Attach the images to a draft release
@@ -146,7 +168,7 @@ jobs:
         run: |
           cd dist
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" *.uf2 SHA256SUMS --clobber
+            gh release upload "$GITHUB_REF_NAME" *.uf2 *.minisig SHA256SUMS --clobber
             exit 0
           fi
           cat > ../notes.md <<EOF
@@ -168,11 +190,20 @@ jobs:
           Hold the board's BOOT button while plugging it in. It shows up as a USB drive: copy the
           image onto it, and the board restarts with the new firmware.
 
+          ## Verifying
+
+          Each image has a [minisign](https://jedisct1.github.io/minisign/) signature next to it,
+          which the DS2000 app checks before installing. To check one yourself:
+
+          \`\`\`
+          minisign -Vm DS2000-Firmware_<version>_<board>.uf2 -P $(sed -n 2p ../minisign.pub)
+          \`\`\`
+
           ## Checksums
 
           \`\`\`
           $(cat SHA256SUMS)
           \`\`\`
           EOF
-          gh release create "$GITHUB_REF_NAME" *.uf2 SHA256SUMS --draft --verify-tag \
+          gh release create "$GITHUB_REF_NAME" *.uf2 *.minisig SHA256SUMS --draft --verify-tag \
             --title "DS2000-Firmware $GITHUB_REF_NAME" --notes-file ../notes.md --generate-notes
