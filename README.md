@@ -30,7 +30,9 @@ module's onboard WS2812 (mute LED only). It is not released.
 The latest images are in the [latest release](https://github.com/Mechanix97/DS2000-Firmware/releases/latest),
 one `.uf2` per board.
 
-1. Download the `.uf2` for your board. Its SHA-256 is in the release notes.
+1. Download the `.uf2` for your board. Its SHA-256 is in the release notes, and its
+   [minisign](https://jedisct1.github.io/minisign/) signature is next to it: check it with
+   `minisign -Vm <image>.uf2 -p minisign.pub`.
 2. Hold the board's BOOT button (BOOTSEL on the Picos) while plugging it in. It shows up as a USB drive.
 3. Copy the `.uf2` onto the drive. The board restarts with the new firmware.
 
@@ -93,6 +95,12 @@ pio test -e native   # framing tests against the protocol's reference frames (ne
 The version is set once, as `custom_firmware_version` in `platformio.ini`. Bump it, merge, and push
 a matching tag (`v0.2.0` for `0.2.0`). CI runs the tests, builds every board and attaches the images
 and their checksums to a draft release. A tag that does not match `platformio.ini` fails the build.
+
+Every image is signed with minisign. The app installs only images that check against the public key
+it ships with, which is the one in [`minisign.pub`](minisign.pub). The secret key and its password
+are the repository secrets `FIRMWARE_SIGNING_KEY` and `FIRMWARE_SIGNING_KEY_PASSWORD`, in Tauri's
+signer format (`tauri signer generate`); a release without them fails. Never replace the key without
+a plan: installed apps only accept images signed with the matching secret key.
 
 ## License
 
