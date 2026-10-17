@@ -106,6 +106,10 @@ a plan: installed apps only accept images signed with the matching secret key.
 
 [AGPL-3.0](LICENSE).
 
+The DS2000 name and the DS2000 and Mechardo Labs logos are not covered by the license: as an
+additional term under AGPL-3.0 section 7(e), their use is governed by the
+[trademark policy](TRADEMARKS.md). Forks are welcome under a name of their own.
+
 ## The DS2000 project
 
 - [DS2000](https://github.com/Mechanix97/DS2000): the desktop app
