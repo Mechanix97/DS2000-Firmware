@@ -3,7 +3,12 @@
 // machine on the RP2040 and RP2350, so the CPU does not bit-bang the 800 kHz timing.
 #ifdef LED_DRIVER_PIXEL
 
+// The library's RP2040 PIO header leaves fields of the SDK's pio_program uninitialised, which
+// -Wextra reports, and this file builds with warnings as errors. Silenced for that header only.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #include <Adafruit_NeoPixel.h>
+#pragma GCC diagnostic pop
 
 #include "leds.h"
 #include "pins.h"
