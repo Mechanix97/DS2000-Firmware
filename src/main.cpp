@@ -88,6 +88,15 @@ unsigned long lastAnimationFrame = 0;
 /// 60 Hz. Smooth to the eye, and still leaves the loop overwhelmingly idle.
 const unsigned long ANIMATION_INTERVAL = 16;
 
+/// How long loop() may go without coming round before the hardware watchdog resets the chip.
+///
+/// Without it, a hang (a bug, or USB stuck in a state the core never returns from) left the device
+/// dead until it was unplugged; with it, the device restarts and the application reconnects on its
+/// own. A pass of loop() normally takes microseconds. The longest legitimate one is a Serial.write
+/// to a host that has the port open but stopped reading, which the core gives up on after a
+/// second, so 3 s leaves room for that without resetting a device that is only waiting.
+const uint32_t WATCHDOG_TIMEOUT_MS = 3000;
+
 /// How fast the animated modes run, as the application last set it. Higher is faster.
 ///
 /// 128 is the midpoint and reproduces the periods this firmware used before the control existed,
@@ -405,10 +414,14 @@ void setup()
     ledsBegin();
 
     Serial.begin(115200);
+
+    // Started last, so nothing above counts against it.
+    rp2040.wdt_begin(WATCHDOG_TIMEOUT_MS);
 }
 
 void loop()
 {
+    rp2040.wdt_reset();
     handle_serial_input();
     handle_buttons();
     set_led_pwm();
