@@ -95,6 +95,9 @@ pio test -e native   # framing tests against the protocol's reference frames (ne
 The version is set once, as `custom_firmware_version` in `platformio.ini`. Bump it, merge, and push
 a matching tag (`v0.2.0` for `0.2.0`). CI runs the tests, builds every board and attaches the images
 and their checksums to a draft release. A tag that does not match `platformio.ini` fails the build.
+Publishing the release (not a pre-release) posts its changes to Discord through the webhook in the
+repository secret `DISCORD_WEBHOOK_URL`; without it nothing is posted. **Actions → Announce → Run
+workflow** sends it again for a given tag.
 
 Every image is signed with minisign. The app installs only images that check against the public key
 it ships with, which is the one in [`minisign.pub`](minisign.pub). The secret key and its password
