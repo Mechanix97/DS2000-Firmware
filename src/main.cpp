@@ -3,33 +3,12 @@
 #include "leds.h"
 #include "pins.h"
 #include "debounce.h"
+#include "messages.h"
 #include "protocol.h"
 
-/// Message codes shared with the desktop application. Changing one breaks every device already
-/// flashed, so they are part of the contract rather than an implementation detail.
-enum MessageCode : uint8_t
-{
-    /// The application opening a session. Answered with MSG_DEVICE_INFO.
-    MSG_HELLO = 0x00,
-    /// `[protocol][board][major][minor][patch]`: what the application decides compatibility on.
-    MSG_DEVICE_INFO = 0x01,
-    MSG_BUTTON = 0x02,
-    MSG_VOICE_SETTINGS = 0x03,
-    MSG_RGB = 0x04,
-    /// Reboot into USB boot for a firmware update. Payload is REBOOT_MAGIC.
-    MSG_REBOOT_TO_BOOTLOADER = 0x05,
-};
-
-/// Required payload of MSG_REBOOT_TO_BOOTLOADER. The CRC already rejects corrupted frames, but a
-/// message that takes the device offline should not hang on a single code byte either.
-const uint8_t REBOOT_MAGIC[] = {'B', 'O', 'O', 'T'};
-
-enum ButtonId : uint8_t
-{
-    BUTTON_MUTE = 0x00,
-    BUTTON_DEAFEN = 0x01,
-    BUTTON_DISCONNECT = 0x02,
-};
+// The message codes, button ids and RGB modes, and which bodies are accepted, live in
+// lib/messages so the native tests can check them.
+using namespace messages;
 
 /// Wire format revision this firmware speaks, reported in MSG_DEVICE_INFO.
 ///
@@ -46,13 +25,6 @@ const uint8_t PROTOCOL_VERSION = 1;
 #ifndef BOARD_ID
 #error "BOARD_ID is missing: set custom_board_id for this environment in platformio.ini"
 #endif
-
-enum RgbMode : uint8_t
-{
-    RGB_MODE_RAINBOW = 0x00,
-    RGB_MODE_FIXED = 0x01,
-    RGB_MODE_BREATHING = 0x02,
-};
 
 LED_RGB_T muteLed = {255, 255, 255, 255};
 LED_RGB_T deafLed = {255, 255, 255, 255};
@@ -233,11 +205,8 @@ void sendButton(uint8_t button)
     sendFrame(payload, sizeof(payload));
 }
 
-void handleVoiceSettings(uint8_t m, uint8_t d)
+void handleVoiceSettings(bool newMute, bool newDeafen)
 {
-    bool newMute = (m != 0x00);
-    bool newDeafen = (d != 0x00);
-
     if (newMute != mute || newDeafen != deafen)
     {
         mute = newMute;
@@ -246,84 +215,50 @@ void handleVoiceSettings(uint8_t m, uint8_t d)
     }
 }
 
-void handleRgb(const uint8_t *payload, uint8_t length)
+/// Applies an RGB message that has already passed every check, so it lands whole.
+void handleRgb(const Message &message)
 {
-    // Brightness, mode and speed. The six colour bytes follow only for the modes that use them.
-    if (length < 4)
-    {
-        return;
-    }
+    muteLed.brightness = message.brightness;
+    deafLed.brightness = message.brightness;
+    rgbMode = message.mode;
+    rgbSpeed = message.speed;
 
-    const uint8_t mode = payload[2];
-    if (mode != RGB_MODE_RAINBOW && mode != RGB_MODE_FIXED && mode != RGB_MODE_BREATHING)
+    if (message.hasColours)
     {
-        // Drop the whole frame rather than adopt half of it: a mode byte this side does not know
-        // means the desktop application is ahead of this firmware, and guessing would leave the
-        // brightness applied under an effect that was never asked for.
-        return;
-    }
-
-    const bool carriesColours = (mode == RGB_MODE_FIXED || mode == RGB_MODE_BREATHING);
-    if (carriesColours && length < 10)
-    {
-        return;
-    }
-
-    // Nothing is written until every check has passed. Validating as it went meant a truncated
-    // frame still landed its brightness and mode before bailing out, leaving the device lit by
-    // half a message it had already rejected.
-    muteLed.brightness = payload[1];
-    deafLed.brightness = payload[1];
-    rgbMode = mode;
-    rgbSpeed = payload[3];
-
-    if (carriesColours)
-    {
-        muteLed.red = payload[4];
-        muteLed.green = payload[5];
-        muteLed.blue = payload[6];
-        deafLed.red = payload[7];
-        deafLed.green = payload[8];
-        deafLed.blue = payload[9];
+        muteLed.red = message.muteColour.red;
+        muteLed.green = message.muteColour.green;
+        muteLed.blue = message.muteColour.blue;
+        deafLed.red = message.deafenColour.red;
+        deafLed.green = message.deafenColour.green;
+        deafLed.blue = message.deafenColour.blue;
     }
 
     ledsDirty = true;
 }
 
-void dispatch(const uint8_t *payload, uint8_t length)
+/// Acts on one decoded body. Which bodies are accepted, and which are dropped, is decided by
+/// messages::parse.
+void dispatch(const uint8_t *body, size_t length)
 {
-    switch (payload[0])
+    const Message message = parse(body, length);
+    switch (message.command)
     {
-    case MSG_HELLO:
-        // Exactly the code: anything longer is not a hello, whatever its first byte says.
-        if (length == 1)
-        {
-            sendDeviceInfo();
-        }
+    case Command::HELLO:
+        sendDeviceInfo();
         break;
-    case MSG_VOICE_SETTINGS:
-        if (length >= 3)
-        {
-            handleVoiceSettings(payload[1], payload[2]);
-        }
+    case Command::VOICE_SETTINGS:
+        handleVoiceSettings(message.mute, message.deafen);
         break;
-    case MSG_RGB:
-        handleRgb(payload, length);
+    case Command::RGB:
+        handleRgb(message);
         break;
-    case MSG_REBOOT_TO_BOOTLOADER:
-        if (length == 1 + sizeof(REBOOT_MAGIC) && memcmp(payload + 1, REBOOT_MAGIC, sizeof(REBOOT_MAGIC)) == 0)
-        {
-            // Nothing is answered: the port disappearing is the reply. The LEDs go dark so the
-            // device does not look stuck on its last colour while it waits for an image.
-            ledsShow(muteLed, false, deafLed, false);
-            rp2040.rebootToBootloader();
-        }
+    case Command::REBOOT_TO_BOOTLOADER:
+        // Nothing is answered: the port disappearing is the reply. The LEDs go dark so the device
+        // does not look stuck on its last colour while it waits for an image.
+        ledsShow(muteLed, false, deafLed, false);
+        rp2040.rebootToBootloader();
         break;
-    case MSG_DEVICE_INFO:
-    case MSG_BUTTON:
-        // Sent by this device, never received by it.
-        break;
-    default:
+    case Command::NONE:
         break;
     }
 }
