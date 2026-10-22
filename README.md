@@ -87,7 +87,7 @@ The wire format this firmware speaks with the desktop app is specified in the ap
 it bumps `PROTOCOL_VERSION` on both sides and lands as a pair of pull requests.
 
 ```sh
-pio test -e native   # framing tests against the protocol's reference frames (needs gcc or clang)
+pio test -e native   # framing, message parsing and debounce tests on the host (needs gcc or clang)
 ```
 
 ## Releasing

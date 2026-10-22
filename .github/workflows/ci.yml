@@ -34,8 +34,9 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
 
-      # The framing tests run on the host against the reference frames in the application's
-      # docs/PROTOCOL.md. ubuntu-latest ships gcc, which is all the native environment needs.
+      # The framing tests (against the reference frames in the application's docs/PROTOCOL.md), the
+      # message parsing tests and the debounce tests run on the host. ubuntu-latest ships gcc, which
+      # is all the native environment needs.
       - name: Test
         run: pio test -e native
 
