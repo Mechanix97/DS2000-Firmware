@@ -171,11 +171,19 @@ void set_led_pwm()
 }
 
 /// Sends one message body, framed: CRC, COBS and the delimiter are added here.
+///
+/// A frame goes out whole or not at all. When the host has the port open but has stopped reading,
+/// the USB buffer fills up, and Serial.write waits for room for up to a second, with the keys and
+/// LEDs frozen, and then gives up partway. The half frame it leaves on the wire has no delimiter,
+/// so the host also loses the next frame, which it reads as the rest of this one and drops on
+/// the CRC. A frame the host is not reading would be lost anyway, so it is dropped up front. A
+/// device info dropped this way fails the application's handshake, which it retries on its
+/// reconnect backoff.
 void sendFrame(const uint8_t *body, size_t length)
 {
     uint8_t wire[protocol::MAX_ENCODED_FRAME];
     const size_t wireLength = protocol::encodeFrame(body, length, wire);
-    if (wireLength == 0)
+    if (wireLength == 0 || Serial.availableForWrite() < (int)wireLength)
     {
         return;
     }
