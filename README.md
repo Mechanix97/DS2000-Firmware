@@ -92,9 +92,12 @@ pio test -e native   # framing, message parsing and debounce tests on the host (
 
 ## Releasing
 
-The version is set once, as `custom_firmware_version` in `platformio.ini`. Bump it, merge, and push
-a matching tag (`v0.2.0` for `0.2.0`). CI runs the tests, builds every board and attaches the images
-and their checksums to a draft release. A tag that does not match `platformio.ini` fails the build.
+The version is set once, as `custom_firmware_version` in `platformio.ini`. Changes users will notice
+go under **Unreleased** in [CHANGELOG.md](CHANGELOG.md) as they land. To release, bump the version
+and move **Unreleased** under it in the same pull request, merge, and push a matching tag (`v0.2.0`
+for `0.2.0`). CI runs the tests, builds every board and attaches the images and their checksums to
+a draft release, with the `CHANGELOG.md` entry at the top of its notes. A tag that does not match
+`platformio.ini`, or that has no `CHANGELOG.md` entry, fails the release.
 Publishing the release (not a pre-release) posts its changes to Discord through the webhook in the
 repository secret `DISCORD_WEBHOOK_URL`; without it nothing is posted. **Actions → Announce → Run
 workflow** sends it again for a given tag.
