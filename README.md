@@ -15,12 +15,15 @@ brightness and mode (rainbow, fixed, breathing) are set from the app.
 
 | Environment | Board | Board id |
 |---|---|---|
+| `rev_a` | DS2000 rev A ([PCB](https://github.com/Mechanix97/DS2000-PCB)): discrete RP2350A, pixel LEDs | `0x10` |
 | `rp2350_zero` | Waveshare RP2350-Zero (default, the current prototype) | `0x01` |
 | `pico2` | Raspberry Pi Pico 2 | `0x02` |
 | `pico` | Raspberry Pi Pico (RP2040) | `0x03` |
 
-The board id is reported to the app in the handshake. The DS2000 rev A board does not have an
-environment yet ([#12](https://github.com/Mechanix97/DS2000-Firmware/issues/12)).
+The board id is reported to the app in the handshake, so a firmware update picks the image built
+for that board. Rev A uses the RP2350-Zero's board definition (same chip, 4 MB flash and 12 MHz
+crystal) with the pixel LED driver. It has no BOOT button: a board with empty flash comes up in USB
+boot on its own, and otherwise the BOOT pads (JP1, underneath) are bridged while plugging it in.
 
 `rp2350_zero_pixel` is a development build of `rp2350_zero` that runs the rev A LED driver on the
 module's onboard WS2812 (mute LED only). It is not released.
@@ -75,7 +78,7 @@ The LEDs have two drivers, picked per environment:
 | Driver | Hardware | Pins | Used by |
 |---|---|---|---|
 | PWM (default) | One common-cathode RGB LED per key | Mute R / G / B on GP5 / GP6 / GP7, deafen on GP8 / GP9 / GP10 | the prototype: `rp2350_zero`, `pico2`, `pico` |
-| Pixel (`LED_DRIVER_PIXEL`) | WS2812-compatible chain, mute first, GRB | Data on GP5 | rev A |
+| Pixel (`LED_DRIVER_PIXEL`) | WS2812-compatible chain, mute first, GRB | Data on GP5 | `rev_a` |
 
 [`include/pins.h`](include/pins.h) is the source of truth: the
 [PCB](https://github.com/Mechanix97/DS2000-PCB) follows it.
