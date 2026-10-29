@@ -52,8 +52,9 @@ jobs:
           - env: rp2350_zero
           - env: pico2
           - env: pico
-          # Built so the pixel LED driver keeps compiling before rev A has an environment, but not
-          # released: its artifact is named dev-firmware-*, which the release job does not pick up.
+          - env: rev_a
+          # The pixel driver on the RP2350-Zero's onboard LED, for trying it without a rev A board.
+          # Not released: its artifact is named dev-firmware-*, which the release job does not pick up.
           - env: rp2350_zero_pixel
             dev: true
 
@@ -203,12 +204,16 @@ jobs:
 
           | Board | Image |
           |---|---|
+          | DS2000 rev A | \`*_rev_a.uf2\` |
           | Waveshare RP2350-Zero | \`*_rp2350_zero.uf2\` |
           | Raspberry Pi Pico 2 | \`*_pico2.uf2\` |
           | Raspberry Pi Pico (RP2040) | \`*_pico.uf2\` |
 
           Hold the board's BOOT button while plugging it in. It shows up as a USB drive: copy the
-          image onto it, and the board restarts with the new firmware.
+          image onto it, and the board restarts with the new firmware. The DS2000 rev A has no BOOT
+          button: a new board with empty flash shows up as that drive on its own; otherwise bridge
+          the BOOT pads (JP1, underneath) while plugging it in. Once a release is on it, the DS2000
+          app installs the next ones.
 
           ## Verifying
 

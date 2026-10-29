@@ -9,6 +9,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- An image for the DS2000 rev A board (`*_rev_a.uf2`), with its two LEDs under the mute and deafen
+  keys.
+
 ## [0.2.1] - 2026-10-17
 
 Serial protocol 1.
